@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Scratch Arcade</title>
+  <meta name="description" content="Sube, juega y descarga proyectos de Scratch con tus amigos.">
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#f5f7fb;background:#0b1020}
+    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at top,#1b2750 0,#0b1020 48%);min-height:100vh}
+    .wrap{width:min(1100px,92%);margin:auto;padding:28px 0 60px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}
+    .logo{font-size:28px;font-weight:900}.logo span{color:#ffab19}
+    .user{background:#ffffff12;border:1px solid #ffffff1c;border-radius:999px;padding:8px 12px;color:#cbd3e6}
+    .hero{padding:28px;border:1px solid #ffffff18;border-radius:24px;background:#ffffff0b;backdrop-filter:blur(12px);margin-bottom:22px}
+    h1{font-size:clamp(30px,6vw,54px);margin:0 0 8px}.hero p{color:#b9c3d9;margin:0 0 20px}
+    .upload{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    input[type=text]{flex:1;min-width:220px;background:#080c18;color:white;border:1px solid #ffffff22;border-radius:12px;padding:13px}
+    input[type=file]{display:none}.filebtn,.btn{border:0;border-radius:12px;padding:13px 16px;font-weight:800;cursor:pointer}
+    .filebtn{background:#ffab19;color:#241500}.btn{background:#ffffff12;color:#fff;border:1px solid #ffffff20}
+    .btn.primary{background:#ffab19;color:#241500;border:0}.btn.danger{color:#ff8e8e}
+    .selected{color:#9ca9c5;font-size:14px;margin-top:10px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:16px}
+    .card{background:#ffffff0b;border:1px solid #ffffff14;border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 12px 30px #0002}
+    .card h3{margin:0;font-size:20px;overflow-wrap:anywhere}.meta{font-size:13px;color:#96a2bc}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}.actions .btn{flex:1}
+    .empty,.status{color:#aeb9cf;text-align:center;padding:35px}.error{color:#ff9d9d}
+    .modal{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;padding:15px;z-index:10}
+    .modal.open{display:flex}.modalbox{width:min(1000px,100%);background:#11182b;border:1px solid #ffffff20;border-radius:20px;padding:14px}
+    .modalbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.modalbar b{font-size:18px}
+    iframe{width:100%;height:min(72vh,650px);border:0;border-radius:12px;background:#000}
+    footer{margin-top:35px;color:#75819a;font-size:13px;text-align:center}
+    @media(max-width:600px){header{align-items:flex-start;flex-direction:column}.hero{padding:20px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">🎮 Scratch <span>Arcade</span></div>
+    <div class="user" id="userLabel">Conectando…</div>
+  </header>
+
+  <section class="hero">
+    <h1>Tu sala de juegos 🚀</h1>
+    <p>Subí un proyecto <b>.sb3</b>, poné un nombre y tus amigos podrán jugarlo o descargarlo.</p>
+    <div class="upload">
+      <input id="name" type="text" maxlength="60" placeholder="Nombre del juego">
+      <label class="filebtn" for="file">📁 Elegir .sb3</label>
+      <input id="file" type="file" accept=".sb3,application/zip">
+      <button class="btn primary" id="uploadBtn">⬆️ Subir juego</button>
+    </div>
+    <div class="selected" id="selected">Ningún archivo seleccionado.</div>
+    <div class="selected" id="status"></div>
+  </section>
+
+  <h2>🕹️ Juegos de la sala</h2>
+  <div id="games" class="grid"><div class="status">Cargando juegos…</div></div>
+
+  <footer>Hecho para compartir proyectos de Scratch con amigos. No es un servicio oficial de Scratch.</footer>
+</div>
+
+<div class="modal" id="modal">
+  <div class="modalbox">
+    <div class="modalbar"><b id="modalTitle">Juego</b><button class="btn" id="close">✕</button></div>
+    <iframe id="player" allowfullscreen></iframe>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-storage.js";
+import { firebaseConfig } from "./firebase-config.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
+
+const $ = id => document.getElementById(id);
+const fileInput = $("file"), selected = $("selected"), status = $("status");
+let currentUser = null;
+
+fileInput.addEventListener("change", () => {
+  const f = fileInput.files[0];
+  selected.textContent = f ? `${f.name} — ${(f.size/1024/1024).toFixed(2)} MB` : "Ningún archivo seleccionado.";
+});
+
+$("uploadBtn").onclick = async () => {
+  if (!currentUser) return showStatus("Esperá un segundo: todavía no estamos conectados.");
+  const f = fileInput.files[0];
+  const title = $("name").value.trim() || (f?.name || "").replace(/\.sb3$/i,"");
+  if (!f) return showStatus("Elegí un archivo .sb3.");
+  if (!/\.sb3$/i.test(f.name)) return showStatus("Solo se aceptan proyectos .sb3.");
+  if (f.size > 50 * 1024 * 1024) return showStatus("Ese proyecto supera el límite de 50 MB.");
+  showStatus("Subiendo…");
+
+  try {
+    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g,"_");
+    const path = `projects/${currentUser.uid}/${Date.now()}_${safe}`;
+    const fileRef = ref(storage, path);
+    await uploadBytes(fileRef, f, {contentType:"application/x.scratch.sb3"});
+    const url = await getDownloadURL(fileRef);
+    await addDoc(collection(db,"games"), {
+      title, fileName:f.name, url, path,
+      uploader:$("userLabel").dataset.name || "Amigo",
+      uid:currentUser.uid,
+      size:f.size, createdAt:serverTimestamp()
+    });
+    $("name").value=""; fileInput.value=""; selected.textContent="Ningún archivo seleccionado.";
+    showStatus("✅ Juego subido.");
+  } catch(e) {
+    console.error(e);
+    showStatus("❌ No se pudo subir. Revisá la configuración de Firebase.");
+  }
+};
+
+function showStatus(t){status.textContent=t; setTimeout(()=>{if(status.textContent===t) status.textContent=""},5000)}
+
+onAuthStateChanged(auth, u => {
+  currentUser=u;
+  if(u) {
+    let name=localStorage.getItem("scratchArcadeName");
+    if(!name){ name=prompt("¿Cómo querés aparecer en la sala?") || "Amigo"; localStorage.setItem("scratchArcadeName",name); }
+    $("userLabel").textContent="👤 "+name; $("userLabel").dataset.name=name;
+  }
+});
+signInAnonymously(auth).catch(e => showStatus("❌ Activá Anonymous Authentication en Firebase."));
+
+const gamesQuery = query(collection(db,"games"), orderBy("createdAt","desc"));
+onSnapshot(gamesQuery, snap => {
+  const games = $("games");
+  if(snap.empty){ games.innerHTML='<div class="empty">Todavía no hay juegos. ¡Subí el primero! 🥳</div>'; return; }
+  games.innerHTML="";
+  snap.forEach(d => {
+    const g=d.data();
+    const card=document.createElement("article");
+    card.className="card";
+    const date=g.createdAt?.toDate ? g.createdAt.toDate().toLocaleDateString("es-AR") : "ahora";
+    const own=currentUser && g.uid===currentUser.uid;
+    card.innerHTML=`
+      <h3>${escapeHtml(g.title)}</h3>
+      <div class="meta">👤 ${escapeHtml(g.uploader||"Amigo")} · 📅 ${date}</div>
+      <div class="actions">
+        <button class="btn primary play">▶️ Jugar</button>
+        <a class="btn" href="${g.url}" target="_blank" rel="noopener">⬇️ Descargar</a>
+        ${own ? '<button class="btn danger delete">🗑️ Borrar</button>' : ''}
+      </div>`;
+    card.querySelector(".play").onclick=()=>play(g.title,g.url);
+    if(own) card.querySelector(".delete").onclick=()=>removeGame(d.id,g.path);
+    games.appendChild(card);
+  });
+}, e => {
+  console.error(e); $("games").innerHTML='<div class="empty error">No se pudieron cargar los juegos. Revisá Firestore.</div>';
+});
+
+function play(title,url){
+  $("modalTitle").textContent=title;
+  $("player").src="https://turbowarp.org/?project_url="+encodeURIComponent(url);
+  $("modal").classList.add("open");
+}
+$("close").onclick=()=>{ $("modal").classList.remove("open"); $("player").src=""; };
+$("modal").onclick=e=>{ if(e.target.id==="modal") $("close").click(); };
+
+async function removeGame(id,path){
+  if(!confirm("¿Borrar este juego?")) return;
+  try{ await deleteDoc(doc(db,"games",id)); await deleteObject(ref(storage,path)); }
+  catch(e){ console.error(e); showStatus("❌ No se pudo borrar."); }
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]));}
+</script>
+</body>
+</html>
