@@ -1,8 +1,9 @@
-const { getStore } = require("@netlify/blobs");
+const { getStore, connectLambda } = require("@netlify/blobs");
 const Busboy = require("busboy");
 const crypto = require("crypto");
 
 exports.handler = async (event) => {
+  connectLambda(event);
   if (event.httpMethod !== "POST") return {statusCode:405, body:JSON.stringify({error:"Método no permitido"})};
   try {
     const bb = Busboy({headers:event.headers});

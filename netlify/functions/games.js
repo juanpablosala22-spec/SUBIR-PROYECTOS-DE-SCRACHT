@@ -1,5 +1,6 @@
-const { getStore } = require("@netlify/blobs");
-exports.handler=async()=>{
+const { getStore, connectLambda } = require("@netlify/blobs");
+exports.handler=async(event)=>{
+ connectLambda(event);
  try{
   const store=getStore("scratch-games");
   const result=await store.list({details:true});

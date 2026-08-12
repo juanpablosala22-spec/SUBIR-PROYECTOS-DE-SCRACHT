@@ -1,5 +1,6 @@
-const { getStore } = require("@netlify/blobs");
+const { getStore, connectLambda } = require("@netlify/blobs");
 exports.handler=async(event)=>{
+ connectLambda(event);
  try{
   const id=event.queryStringParameters?.id;
   if(!id || !/^[a-z0-9-]+$/i.test(id)) return {statusCode:400,body:"ID inválido"};
