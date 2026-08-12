@@ -82,7 +82,12 @@ $("upload").onclick=async()=>{
   const d=await r.json();if(!r.ok)throw Error(d.error||"No se pudo subir");
   status("✅ ¡Juego subido!");
   $("title").value="";$("file").value="";selected=null;$("fileInfo").textContent="Ningún archivo seleccionado.";
-  await load();
+  // Netlify Blobs uses eventual consistency for list operations.
+  // Retry a few times so the freshly uploaded game appears without a manual refresh.
+  for (let i=0; i<5; i++) {
+    await new Promise(r=>setTimeout(r, 800));
+    await load();
+  }
  }catch(e){console.error(e);status("❌ "+e.message)}finally{$("upload").disabled=false}
 };
 load();

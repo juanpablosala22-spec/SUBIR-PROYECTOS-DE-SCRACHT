@@ -2,6 +2,12 @@
 
 Versión sin Firebase. Usa **Netlify Functions + Netlify Blobs**.
 
+### V4: listado y aparición inmediata de juegos
+La lista obtiene los metadatos de cada blob con `getMetadata()`, porque `list()` devuelve claves/ETags y no los metadatos del objeto. Además, la página reintenta cargar la lista después de una subida para compensar la consistencia eventual de Netlify Blobs.
+
+### V3: compatibilidad con Netlify Functions v1
+Las Functions llaman `connectLambda(event)` para inicializar correctamente el contexto de Netlify Blobs antes de usar el store.
+
 ## Funciones
 
 - Subir `.sb3`
