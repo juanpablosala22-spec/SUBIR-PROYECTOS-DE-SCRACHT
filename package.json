@@ -1,0 +1,9 @@
+{
+  "name": "scratch-arcade",
+  "version": "2.0.0",
+  "private": true,
+  "dependencies": {
+    "@netlify/blobs": "latest",
+    "busboy": "^1.6.0"
+  }
+}
